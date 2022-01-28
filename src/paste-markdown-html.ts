@@ -14,9 +14,8 @@ function onPaste(event: ClipboardEvent) {
   const transfer = event.clipboardData
   // if there is no clipboard data, or
   // if there is no html content in the clipboard, or
-  // if the browser has made an "improved URL for pasting", return
-  // See https://support.microsoft.com/en-gb/microsoft-edge/improved-copy-and-paste-of-urls-in-microsoft-edge-d3bd3956-603a-0033-1fbc-9588a30645b4 for more
-  if (!transfer || !hasHTML(transfer) || hasLinkPreview(transfer)) return
+  // if there is no "improved" link from Microsoft Edge ("text/link-preview"), return
+  if (!transfer || !hasHTML(transfer) || !hasLinkPreview(transfer)) return
 
   const field = event.currentTarget
   if (!(field instanceof HTMLTextAreaElement)) return
@@ -24,17 +23,30 @@ function onPaste(event: ClipboardEvent) {
   // Get the plaintext and html version of clipboard contents
   let text = transfer.getData('text/plain')
   const textHTML = transfer.getData('text/html')
-  if (!textHTML) return
+  const textLinkPreview = transfer.getData('text/link-preview')
+  let markdown = ''
 
+  // All we need is HTML and plaintext to build links, but we can also use textLinkPreview if it exists
+  if (!textHTML) return
   text = text.trim()
   if (!text) return
 
-  // Generate DOM tree from HTML string
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(textHTML, 'text/html')
-
-  const a = doc.getElementsByTagName('a')
-  const markdown = transform(a, text, linkify as MarkdownTransformer)
+  if (hasLinkPreview(transfer)) {
+    // Generate JSON from linkPreview string
+    const json = JSON.parse(textLinkPreview)
+    markdown = linkify({
+      textContent: json?.title,
+      href: json?.url,
+    })
+  }
+  else {
+    // Generate DOM tree from HTML string
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(textHTML, 'text/html')
+  
+    const a = doc.getElementsByTagName('a')
+    markdown = transform(a, text, linkify as MarkdownTransformer)
+  }
 
   // If no changes made by transforming
   if (markdown === text) return
